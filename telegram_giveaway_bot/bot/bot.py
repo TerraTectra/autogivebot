@@ -149,24 +149,30 @@ async def button_callback(update: Update, context: CallbackContext):
                 await query.edit_message_text(text=f"Sorry, the giveaway '{giveaway.title}' has ended.")
                 return
 
-            participant = giveaway_manager.add_participant(db, giveaway_id=giveaway_id, user_id=user.id)
-            if participant:
+            # Attempt to add participant and get a status
+            participation_result = giveaway_manager.add_participant(db, giveaway_id=giveaway_id, user_id=user.id)
+
+            if participation_result == 'SUCCESS':
                 await query.message.reply_text(f"@{user_info.username} You have successfully participated in '{giveaway.title}'!")
-                # Optionally, update the giveaway message to show number of participants
-            else:
-                # This case might mean they are already participating or some other issue
-                await query.message.reply_text(f"@{user_info.username} You are already participating or an error occurred.")
+            elif participation_result == 'ALREADY_PARTICIPATING':
+                await query.message.reply_text(f"@{user_info.username} You are already participating in '{giveaway.title}'.")
+            elif participation_result == 'GIVEAWAY_ENDED': # This check is somewhat redundant here as it's checked above
+                await query.edit_message_text(text=f"Sorry, the giveaway '{giveaway.title}' has already ended.")
+            elif participation_result == 'GIVEAWAY_NOT_FOUND': # Also somewhat redundant
+                 await query.edit_message_text(text="Sorry, this giveaway no longer exists.")
+            else: # Covers 'FAILED' or any other unexpected status from add_participant
+                await query.message.reply_text(f"@{user_info.username} An error occurred while trying to participate. Please try again later.")
     except Exception as e:
         logger.error(f"Error during button callback: {e}", exc_info=True)
-        await query.message.reply_text("An error occurred.")
+        await query.message.reply_text("An error occurred processing your participation.")
     finally:
         db.close()
 
 def main() -> None:
     """Start the bot."""
-    # Initialize database
-    init_db()
-    logger.info("Database initialized.")
+    # Database initialization is now handled by Alembic migrations.
+    # Users should run `alembic upgrade head` before starting the bot for the first time
+    # or after pulling changes that include new migrations.
 
     if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN == 'YOUR_TELEGRAM_BOT_TOKEN_FALLBACK':
         logger.error('CRITICAL: TELEGRAM_BOT_TOKEN is not configured or is using the default fallback. Please set the environment variable.')

@@ -58,9 +58,7 @@ def get_db():
     finally:
         db.close()
 
-def init_db():
-    Base.metadata.create_all(bind=engine)
+# init_db() function is removed as schema creation is now handled by Alembic migrations.
+# Users should use 'alembic upgrade head' to apply migrations.
 
-if __name__ == "__main__":
-    init_db()
-    print("Database initialized!")
+# The if __name__ == "__main__": block for manual init_db() execution is also removed.

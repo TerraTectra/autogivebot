@@ -1,6 +1,7 @@
 # Manages giveaway logic
 from sqlalchemy.orm import Session
 from bot.models import Giveaway, Participant, User
+# Ensure datetime is imported, it was already present but good to confirm for the logic below
 from datetime import datetime
 import random
 
@@ -22,11 +23,13 @@ def get_giveaway(db: Session, giveaway_id: int) -> Giveaway | None:
     """Fetches a giveaway by its ID."""
     return db.query(Giveaway).filter(Giveaway.id == giveaway_id).first()
 
-def add_participant(db: Session, giveaway_id: int, user_id: int) -> Participant | None:
-    """Adds a user as a participant to a giveaway."""
+def add_participant(db: Session, giveaway_id: int, user_id: int) -> str:
+    """Adds a user as a participant to a giveaway. Returns a status string."""
     giveaway = get_giveaway(db, giveaway_id)
     if not giveaway:
-        return None # Or raise an error
+        return 'GIVEAWAY_NOT_FOUND'
+    if giveaway.end_date <= datetime.utcnow():
+        return 'GIVEAWAY_ENDED'
 
     # Check if user is already a participant
     existing_participant = db.query(Participant).filter(
@@ -34,13 +37,21 @@ def add_participant(db: Session, giveaway_id: int, user_id: int) -> Participant 
         Participant.user_id == user_id
     ).first()
     if existing_participant:
-        return existing_participant # Or indicate they are already participating
+        return 'ALREADY_PARTICIPATING'
 
-    new_participant = Participant(user_id=user_id, giveaway_id=giveaway_id)
-    db.add(new_participant)
-    db.commit()
-    db.refresh(new_participant)
-    return new_participant
+    try:
+        new_participant = Participant(user_id=user_id, giveaway_id=giveaway_id)
+        db.add(new_participant)
+        db.commit()
+        db.refresh(new_participant)
+        return 'SUCCESS'
+    except Exception as e:
+        # Optional: Log the exception e
+        # import logging
+        # logger = logging.getLogger(__name__)
+        # logger.error(f"Error adding participant user {user_id} to giveaway {giveaway_id}: {e}", exc_info=True)
+        db.rollback()
+        return 'FAILED'
 
 def select_winner(db: Session, giveaway_id: int) -> User | None:
     """Selects a random winner for the giveaway."""
