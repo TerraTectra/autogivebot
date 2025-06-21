@@ -8,6 +8,17 @@ set REQUIREMENTS_FILE=requirements.txt
 set BOT_SCRIPT=bot/bot.py
 REM === End Configuration ===
 
+REM Function to pause and show errors
+:debug_pause
+if %errorlevel% neq 0 (
+  echo SCRIPT ERROR: The previous command failed with errorlevel %errorlevel%.
+  pause
+  goto :menu
+)
+echo DEBUG: Step completed. Press any key to continue to the next step...
+pause >nul
+goto :eof
+
 REM Function to check if Python is installed
 :check_python
 echo Checking for Python...
@@ -106,8 +117,11 @@ goto :menu
 
 :full_setup_menu_wrapper
 call :check_python || goto :menu
+call :debug_pause
 call :create_venv || goto :menu
+call :debug_pause
 call :install_requirements || goto :menu
+call :debug_pause
 call :remind_token || goto :menu
 echo Full setup steps completed.
 pause
@@ -115,7 +129,9 @@ goto :menu
 
 :install_req_menu_wrapper
 call :create_venv || goto :menu
+call :debug_pause
 call :install_requirements || goto :menu
+call :debug_pause
 echo Dependencies check/update completed.
 pause
 goto :menu

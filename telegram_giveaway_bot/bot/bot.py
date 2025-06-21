@@ -1,4 +1,5 @@
 import logging
+import sys # For sys.exit
 from telegram.ext import Application, CommandHandler, CallbackContext, MessageHandler, filters
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from datetime import datetime
@@ -10,11 +11,19 @@ from bot.models import get_db, init_db, User
 from bot import giveaway_manager
 
 # Configure logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=LOG_LEVEL,
-    # filename=LOG_FILE, # Commenting out for now to see logs in stdout for easier debugging
-)
+if LOG_FILE and LOG_FILE.strip() != '':
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=LOG_LEVEL,
+        filename=LOG_FILE,
+        filemode='a'  # Append to log file
+    )
+else:
+    # Console logging if LOG_FILE is not set or empty
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=LOG_LEVEL
+    )
 logger = logging.getLogger(__name__)
 
 
@@ -177,33 +186,41 @@ def main() -> None:
     if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN == 'YOUR_TELEGRAM_BOT_TOKEN_FALLBACK':
         logger.error('CRITICAL: TELEGRAM_BOT_TOKEN is not configured or is using the default fallback. Please set the environment variable.')
         print('CRITICAL: TELEGRAM_BOT_TOKEN is not configured. Please set the environment variable.')
-        return # Exit if token is not set
+        sys.exit(1) # Exit with error code if token is not set
 
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("create_giveaway", create_giveaway_command))
-    application.add_handler(MessageHandler(filters.COMMAND & filters.Regex(r'/participate_(\d+)'), None)) # Placeholder for direct /participate command if needed
-    application.add_handler(CallbackQueryHandler(button_callback))
-
-    # Scheduler setup
-    jobstores = {
-        'default': SQLAlchemyJobStore(url=DATABASE_URL)
-    }
-    scheduler = AsyncIOScheduler(jobstores=jobstores)
-    scheduler.add_job(check_ended_giveaways, 'interval', seconds=60, args=[application]) # Check every 60 seconds
-    scheduler.start()
-    logger.info("Scheduler started.")
-
-    logger.info("Bot starting to poll...")
     try:
-        application.run_polling()
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user.")
-    finally:
-        scheduler.shutdown()
-        logger.info("Scheduler shutdown.")
+        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("create_giveaway", create_giveaway_command))
+        application.add_handler(MessageHandler(filters.COMMAND & filters.Regex(r'/participate_(\d+)'), None)) # Placeholder for direct /participate command if needed
+        application.add_handler(CallbackQueryHandler(button_callback))
+
+        # Scheduler setup
+        jobstores = {
+            'default': SQLAlchemyJobStore(url=DATABASE_URL)
+        }
+        scheduler = AsyncIOScheduler(jobstores=jobstores)
+        scheduler.add_job(check_ended_giveaways, 'interval', seconds=60, args=[application]) # Check every 60 seconds
+
+
+        logger.info("Bot starting to poll...")
+        try:
+            scheduler.start()
+            logger.info("Scheduler started.")
+            application.run_polling()
+        except KeyboardInterrupt:
+            logger.info("Bot stopped by user (KeyboardInterrupt).")
+        finally:
+            logger.info("Shutting down scheduler...")
+            scheduler.shutdown()
+            logger.info("Scheduler shutdown complete.")
+
+    except Exception as e:
+        logger.critical(f"CRITICAL: Unhandled exception in main execution: {e}", exc_info=True)
+        print(f"CRITICAL: An unhandled error occurred. Check '{LOG_FILE}' (if configured) or console logs for details. Error: {e}")
+        sys.exit(1) # Exit with error code
 
 async def announce_winner(bot, chat_id: int, giveaway: giveaway_manager.Giveaway, winner: User):
     """Announces the winner of a giveaway."""
